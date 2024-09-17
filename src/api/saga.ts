@@ -46,7 +46,7 @@ const editTodoApi = (
 
 // Delete todo
 const deleteTodoApi = (id: number): Promise<void> =>
-  axios.delete(`hhttps://5ee04f989ed06d001696dd93.mockapi.io/todo/${id}`);
+  axios.delete(`https://5ee04f989ed06d001696dd93.mockapi.io/todo/${id}`);
 
 //Tải todos từ AsyncStorage
 function* loadTodosFromStorage() {
