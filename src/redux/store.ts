@@ -13,3 +13,4 @@ const store = createStore(todoReducer, applyMiddleware(sagaMiddleware));
 sagaMiddleware.run(rootSaga);
 
 export default store;
+

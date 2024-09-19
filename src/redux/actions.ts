@@ -34,3 +34,4 @@ export const setTodos = (todos: Array<{ id: number; todo: string }>) => ({
   type: SET_TODOS,
   payload: todos,
 });
+
