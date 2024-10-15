@@ -33,4 +33,17 @@ export const styles = StyleSheet.create({
   deleteButton: {
     color: "red",
   },
+  buttonNext: {
+    backgroundColor: "blue",
+    marginHorizontal: 10,
+    marginBottom: 10,
+    marginTop: 10,
+    borderRadius: 8,
+    padding: 10,
+  },
+  buttonEdit: {
+    textAlign: "center",
+    color: "white",
+    fontWeight: "bold",
+  },
 });

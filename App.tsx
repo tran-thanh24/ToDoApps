@@ -1,14 +1,21 @@
-import React from 'react';
-import { View, Text } from 'react-native';
-import { Provider } from 'react-redux';
-import store from './src/redux/store';
-import TodoList from './src/screens/ToDoList'; // Import component TodoList
+import React from "react";
+import { Provider } from "react-redux";
+import store from "./src/redux/store";
+import TodoList from "./src/screens/ToDoList";
+import DetailScreen from "./src/screens/navigateApi/DetailScreen";
+import { NavigationContainer } from "@react-navigation/native";
+import { createStackNavigator } from "@react-navigation/stack";
+
+const Stack = createStackNavigator();
 
 const App = () => {
   return (
-    <View>
-      <TodoList />
-    </View>
+    <NavigationContainer>
+      <Stack.Navigator initialRouteName="ToDoList">
+        <Stack.Screen name="ToDoList" component={TodoList} />
+        <Stack.Screen name="DetailScreen" component={DetailScreen} />
+      </Stack.Navigator>
+    </NavigationContainer>
   );
 };
 

@@ -6,12 +6,13 @@ import {
   TextInput,
   TouchableOpacity,
   FlatList,
+  Button,
 } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchTodos, addTodo, editTodo, deleteTodo } from "../redux/actions";
 import { styles } from "./style";
 
-const ToDoList = () => {
+const ToDoList = ({ navigation }) => {
   const [task, setTask] = useState("");
   const [editTaskId, setEditTaskId] = useState<number | null>(null);
   const dispatch = useDispatch();
@@ -71,10 +72,15 @@ const ToDoList = () => {
             </View>
           )}
         />
+        <TouchableOpacity
+          style={styles.buttonNext}
+          onPress={() => navigation.navigate("DetailScreen", { todos })}
+        >
+          <Text style={styles.buttonEdit}>Next</Text>
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
 };
 
 export default ToDoList;
-

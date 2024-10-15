@@ -13,24 +13,27 @@ import {
   ADD_TODO_FAILURE,
   EDIT_TODO_FAILURE,
   DELETE_TODO_FAILURE,
+  ADD_TODO_OFFLINE,
+  EDIT_TODO_OFFLINE,
+  DELETE_TODO_OFFLINE,
+  CLEAR_UNSYNCED_TODOS,
+  CLEAR_UNSYNCED_EDITS,
+  CLEAR_UNSYNCED_DELETES,
 } from "../redux/actionType";
 import { FETCH_TODOS, setTodos } from "../redux/actions";
 
-// Fetch todos từ API
+// API functions
 const fetchTodosApi = (): Promise<any> =>
   axios.get("https://5ee04f989ed06d001696dd93.mockapi.io/todo");
 
-// Add todo
 const addTodoApi = (todo: string): Promise<any> =>
   axios.post("https://5ee04f989ed06d001696dd93.mockapi.io/todo", { todo });
 
-// Edit todo
 const editTodoApi = (id: number, updatedTodo: string): Promise<any> =>
   axios.put(`https://5ee04f989ed06d001696dd93.mockapi.io/todo/${id}`, {
     todo: updatedTodo,
   });
 
-// Delete todo
 const deleteTodoApi = (id: number): Promise<void> =>
   axios.delete(`https://5ee04f989ed06d001696dd93.mockapi.io/todo/${id}`);
 
@@ -58,7 +61,8 @@ function* loadTodosFromStorage() {
 // Fetch todos từ API hoặc AsyncStorage
 function* fetchTodosSaga(): Generator<any, void, { data: any[] }> {
   try {
-    const isConnected = yield call(NetInfo.fetch);
+    const state = yield call(NetInfo.fetch);
+    const isConnected = state.isConnected;
     if (isConnected) {
       const response = yield call(fetchTodosApi);
       yield put(setTodos(response.data));
@@ -74,32 +78,29 @@ function* fetchTodosSaga(): Generator<any, void, { data: any[] }> {
 // Saga để thêm mới todo
 function* addTodoSaga(action: any): Generator<any, void, { data: any }> {
   try {
-    console.log("Adding new todo:", action.payload);
-    const isConnected = yield call(NetInfo.fetch);
+    const state = yield call(NetInfo.fetch);
+    const isConnected = state.isConnected;
     if (isConnected) {
       const response = yield call(addTodoApi, action.payload);
-      console.log("Add todo response:", response.data);
       yield put({ type: ADD_TODO_SUCCESS, payload: response.data });
       const todos: any[] = yield select((state: any) => state.todos);
       yield call(saveTodosToStorage, [...todos, response.data]);
     } else {
-      // Lưu todo chưa đồng bộ vào AsyncStorage
-      const unsyncedTodos = yield call(
-        [AsyncStorage, "getItem"],
-        "unsyncedTodos"
+      console.log("Không có mạng, lưu todo vào Redux và AsyncStorage");
+      const unsyncedTodos = yield select(
+        (state: any) => state.unsyncedTodos || []
       );
-      const updatedUnsyncedTodos = unsyncedTodos
-        ? JSON.parse(unsyncedTodos)
-        : [];
-      updatedUnsyncedTodos.push({ todo: action.payload });
-      console.log("Unsynced todos:", updatedUnsyncedTodos);
+      yield put({ type: ADD_TODO_OFFLINE, payload: action.payload });
+      const updatedUnsyncedTodos = [...unsyncedTodos, { todo: action.payload }];
       yield call(
         [AsyncStorage, "setItem"],
         "unsyncedTodos",
         JSON.stringify(updatedUnsyncedTodos)
       );
+      console.log("Đã lưu todo vào AsyncStorage:", updatedUnsyncedTodos);
     }
   } catch (error) {
+    console.error("Error adding todo:", error.message);
     yield put({ type: ADD_TODO_FAILURE, payload: error.message });
   }
 }
@@ -107,8 +108,8 @@ function* addTodoSaga(action: any): Generator<any, void, { data: any }> {
 // Saga để sửa todo
 function* editTodoSaga(action: any): Generator<any, void, { data: any }> {
   try {
-    console.log("Editing todo:", action.payload);
-    const isConnected = yield call(NetInfo.fetch);
+    const state = yield call(NetInfo.fetch);
+    const isConnected = state.isConnected;
     if (isConnected) {
       const response = yield call(
         editTodoApi,
@@ -122,22 +123,28 @@ function* editTodoSaga(action: any): Generator<any, void, { data: any }> {
       );
       yield call(saveTodosToStorage, updatedTodos);
     } else {
-      // Lưu todo chưa được sửa vào AsyncStorage để đồng bộ sau
-      const unsyncedEdits = yield call(
-        [AsyncStorage, "getItem"],
-        "unsyncedEdits"
+      console.log("Không có mạng, lưu todo vào Redux và AsyncStorage");
+      const unsyncedEdits = yield select(
+        (state: any) => state.unsyncedEdits || []
       );
-      const updatedUnsyncedEdits = unsyncedEdits
-        ? JSON.parse(unsyncedEdits)
-        : [];
-      updatedUnsyncedEdits.push(action.payload);
+      yield put({ type: EDIT_TODO_OFFLINE, payload: action.payload });
+      const todos: any[] = yield select((state: any) => state.todos);
+      const updatedTodos = todos.map((todo) =>
+        todo.id === action.payload.id
+          ? { ...todo, todo: action.payload.updatedTodo }
+          : todo
+      );
+      yield call(saveTodosToStorage, updatedTodos);
+      const updatedUnsyncedEdits = [...unsyncedEdits, action.payload];
       yield call(
         [AsyncStorage, "setItem"],
         "unsyncedEdits",
         JSON.stringify(updatedUnsyncedEdits)
       );
+      console.log("Đã lưu todo vào AsyncStorage:", updatedUnsyncedEdits);
     }
   } catch (error) {
+    console.error("Error edit todo:", error.message);
     yield put({ type: EDIT_TODO_FAILURE, payload: error.message });
   }
 }
@@ -145,8 +152,8 @@ function* editTodoSaga(action: any): Generator<any, void, { data: any }> {
 // Saga để xóa todo
 function* deleteTodoSaga(action: any): Generator<any, void, void> {
   try {
-    console.log("Deleting todo with id:", action.payload);
-    const isConnected = yield call(NetInfo.fetch);
+    const state = yield call(NetInfo.fetch);
+    const isConnected = state.isConnected;
     if (isConnected) {
       yield call(deleteTodoApi, action.payload);
       yield put({ type: DELETE_TODO_SUCCESS, payload: action.payload });
@@ -154,79 +161,70 @@ function* deleteTodoSaga(action: any): Generator<any, void, void> {
       const updatedTodos = todos.filter((todo) => todo.id !== action.payload);
       yield call(saveTodosToStorage, updatedTodos);
     } else {
-      // Lưu todo chưa được xóa vào AsyncStorage để đồng bộ sau
-      const unsyncedDeletes = yield call(
-        [AsyncStorage, "getItem"],
-        "unsyncedDeletes"
+      console.log("Không có mạng, lưu todo vào Redux và AsyncStorage");
+      const unsyncedDeletes = yield select(
+        (state: any) => state.unsyncedDeletes || []
       );
-      const updatedUnsyncedDeletes = unsyncedDeletes
-        ? JSON.parse(unsyncedDeletes)
-        : [];
-      updatedUnsyncedDeletes.push(action.payload);
+      yield put({ type: DELETE_TODO_OFFLINE, payload: action.payload });
+      const todos: any[] = yield select((state: any) => state.todos);
+      const updatedTodos = todos.filter((todo) => todo.id !== action.payload);
+      yield call(saveTodosToStorage, updatedTodos);
+      const updatedUnsyncedDeletes = [...unsyncedDeletes, action.payload];
       yield call(
         [AsyncStorage, "setItem"],
         "unsyncedDeletes",
         JSON.stringify(updatedUnsyncedDeletes)
       );
+      console.log("Đã lưu todo vào AsyncStorage:", updatedUnsyncedDeletes);
     }
   } catch (error) {
+    console.error("Error delete todo:", error.message);
     yield put({ type: DELETE_TODO_FAILURE, payload: error.message });
   }
 }
 
-// Đồng bộ todos chưa được gửi khi có mạng trở lại
+// Saga để đồng bộ todos chưa được gửi khi có mạng trở lại
 function* syncTodosSaga(): Generator<any, void, void> {
   try {
-    // Đồng bộ thêm todos
-    const unsyncedTodos = yield call(
-      [AsyncStorage, "getItem"],
-      "unsyncedTodos"
+    const unsyncedTodos = yield select(
+      (state: any) => state.unsyncedTodos || []
     );
-    if (unsyncedTodos) {
-      const todosToSync = JSON.parse(unsyncedTodos);
-      for (const todo of todosToSync) {
-        yield call(addTodoApi, todo.todo);
-      }
-      // Xóa danh sách todos chưa đồng bộ sau khi đồng bộ thành công
-      yield call([AsyncStorage, "removeItem"], "unsyncedTodos");
+
+    for (const todo of unsyncedTodos) {
+      console.log("Syncing todo:", todo);
+      const response = yield call(addTodoApi, todo.todo);
+      yield put({ type: ADD_TODO_SUCCESS, payload: response.data });
     }
 
-    // Đồng bộ sửa todos
-    const unsyncedEdits = yield call(
-      [AsyncStorage, "getItem"],
-      "unsyncedEdits"
-    );
-    if (unsyncedEdits) {
-      const editsToSync = JSON.parse(unsyncedEdits);
-      for (const edit of editsToSync) {
-        yield call(editTodoApi, edit.id, edit.updatedTodo);
-      }
-      yield call([AsyncStorage, "removeItem"], "unsyncedEdits");
+    const unsyncedEdits = yield select((state: any) => state.unsyncedEdits);
+    for (const edit of unsyncedEdits) {
+      console.log("Syncing edit:", edit);
+      const response = yield call(editTodoApi, edit.id, edit.updatedTodo);
+      yield put({ type: EDIT_TODO_SUCCESS, payload: response.data });
     }
 
-    // Đồng bộ xóa todos
-    const unsyncedDeletes = yield call(
-      [AsyncStorage, "getItem"],
-      "unsyncedDeletes"
-    );
-    if (unsyncedDeletes) {
-      const deletesToSync = JSON.parse(unsyncedDeletes);
-      for (const id of deletesToSync) {
-        yield call(deleteTodoApi, id);
-      }
-      yield call([AsyncStorage, "removeItem"], "unsyncedDeletes");
+    const unsyncedDeletes = yield select((state: any) => state.unsyncedDeletes);
+    for (const id of unsyncedDeletes) {
+      console.log("Syncing delete for id:", id);
+      yield call(deleteTodoApi, id);
+      yield put({ type: DELETE_TODO_SUCCESS, payload: id });
     }
+
+    // Sau khi đồng bộ xong thì xóa các todos chưa đồng bộ
+    yield put({ type: CLEAR_UNSYNCED_TODOS });
+    yield put({ type: CLEAR_UNSYNCED_EDITS });
+    yield put({ type: CLEAR_UNSYNCED_DELETES });
   } catch (error) {
     console.error("Error syncing todos:", error);
   }
 }
 
-// Theo dõi trạng thái mạng để đồng bộ khi có mạng
+// Theo dõi trạng thái mạng
 function createNetInfoChannel() {
   return eventChannel((emit) => {
-    const unsubscribe = NetInfo.addEventListener((state) => {
-      emit(state.isConnected);
-    });
+    const unsubscribe = NetInfo.addEventListener((state) =>
+      emit(state.isConnected)
+    );
     return unsubscribe;
   });
 }
